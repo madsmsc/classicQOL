@@ -1,25 +1,10 @@
-SLASH_MADS1 = "/madsaddon"
-SLASH_MADS2 = "/mads"
+-- Suppress undefined global warnings for WoW API
+local GameTooltip, CreateFrame, UIParent, SlashCmdList, SendChatMessage =
+    GameTooltip, CreateFrame, UIParent, SlashCmdList, SendChatMessage
+local C_Container, GetItemInfo, ClearCursor, DeleteCursorItem =
+    C_Container, GetItemInfo, ClearCursor, DeleteCursorItem
 
---[[ 
-    NOTES
-wiki: https://wowpedia.fandom.com/wiki
-enable lua errors: 
-  /console scriptErrors 1         or 
-disable: 
-  /console scriptErrors 0
-UnitName("player")
-message("face")
-itype == "Miscellaneous" or itype == "Junk"
-layers:
-background, border, artwork, overlay, hightlight
-
-    TODO
-updateItem: dot notation instead of array index notation?
-introduce filter on itemType?
-IMPORTANT!! mouseover button shows normal tooltip!
-]]--
-
+-- SAY contents of table - used for debugging
 local function sayTable(table)
     if table == nil then
         return
@@ -69,22 +54,22 @@ local function updateItem(item, bag, slot, names)
         return
     end
 
-    item["bag"] = bag
-    item["slot"] = slot
-    item["name"] = itemName
-    item["itype"] = itemType
-    item["price"] = sellPrice * containerInfo.stackCount
-    item["tex"] = itemTexture
+    item.bag = bag
+    item.slot = slot
+    item.name = itemName
+    item.itype = itemType
+    item.price = sellPrice * containerInfo.stackCount
+    item.tex = itemTexture
 end
 
 local function cheapest(names)
     local item = {
-        ["price"] = 999999,
-        ["bag"] = "bag",
-        ["slot"] = "slot",
-        ["name"] = "name",
-        ["itype"] = "itype",
-        ["tex"] = "tex"
+        price = 999999,
+        bag = "bag",
+        slot = "slot",
+        name = "name",
+        itype = "itype",
+        tex = "tex"
     }
     for bag = 0, 4 do
         local maxSlots = C_Container.GetContainerNumSlots(bag)
@@ -93,7 +78,7 @@ local function cheapest(names)
             updateItem(item, bag, slot, names)
         end
     end
-    return item;
+    return item
 end
 
 local function noJunk()
@@ -108,21 +93,18 @@ local function deleteItem(item)
 end
 
 local function sayCheapest(item)
-    local msg = "Cheapest [" .. item.name .. "] [" 
+    local msg = "Cheapest [" .. item.name .. "] ["
         .. item.price .. "c] [" .. item.itype .. "]"
     SendChatMessage(msg, "SAY", nil, nil)
 end
 
-local POSITION = "CENTER" -- "BOTTOMRIGHT"
-local ROWS = 2
-local COLUMNS = 4
-
 local function makeFrame()
+    local POSITION = "CENTER" -- "BOTTOMRIGHT"
     local template = "BasicFrameTemplateWithInset"
     local uiConfig = CreateFrame("Frame", "MyAddon", UIParent, template)
     uiConfig:SetSize(150, 105)
     uiConfig:SetPoint(POSITION, UIParent, POSITION)
-    return uiConfig;
+    return uiConfig
 end
 
 local function makeTitle(uiConfig)
@@ -133,6 +115,7 @@ local function makeTitle(uiConfig)
 end
 
 local function makeButton(uiConfig, item, column, yoff)
+    -- create button
     local template = "GameMenuButtonTemplate"
     uiConfig.button = CreateFrame("Button", nil, uiConfig, template)
     local size = 35
@@ -143,19 +126,40 @@ local function makeButton(uiConfig, item, column, yoff)
     uiConfig.button:SetNormalFontObject("GameFontNormalLarge")
     uiConfig.button:SetHighlightFontObject("GameFontHighlightLarge")
     uiConfig.button:SetNormalTexture(item.tex)
-    uiConfig.button:SetScript("OnClick", 
-        function (self, button, down) 
+
+    -- set scripts
+    uiConfig.button:SetScript("OnClick", function(self, button, down) -- maybe button/down can be omitted
             deleteItem(item)
-        end)
+    end)
+    uiConfig.button:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetBagItem(item.bag, item.slot)
+        GameTooltip:Show()
+    end)
+    uiConfig.button:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
+    end)
 end
 
-local function makeUI(firstItem)
+-- return array of elements separated by spaces
+-- maybe try with " " instead of regexp
+local function strSplit(str)
+    return string.gmatch(str, "[^%s]+")
+end
+
+-- return number of occurances
+local function strCount(base, pattern)
+    return select(2, string.gsub(base, pattern, ""))
+end
+
+-- render the item deletion UI
+local function makeUI(firstItem, cols, rows)
     local uiConfig = makeFrame()
     makeTitle(uiConfig)
     local item = firstItem
     local names = {}
-    for row = 0, ROWS-1, 1 do
-        for column = 0, COLUMNS-1, 1 do
+    for row = 0, rows - 1, 1 do
+        for column = 0, cols - 1, 1 do
             item = cheapest(names)
             if item.name == nil or item.name == "name" then return end
             makeButton(uiConfig, item, column, -20 + 40 * row)
@@ -164,19 +168,53 @@ local function makeUI(firstItem)
     end
 end
 
+-- call makeUI based on the arguments
+local function makeUIargs(item, command)
+    local spaces = strCount(command, " ")
+    local rows = 2
+    local cols = 4
+    if spaces == 2 then
+        local args = strSplit(command)
+        cols = args[1]
+        rows = args[2]
+    end
+    makeUI(item, rows, cols)
+end
+
+-- parse the slash command and args
 local function startCommand(command)
     local item = cheapest()
-    if item.itype == nil then
+    if item.itype == nil then               -- SAY there are no junk items
         noJunk()
-    elseif string.len(command) == 0 then
+    elseif string.len(command) == 0 then    -- SAY the cheapest item
         sayCheapest(item)
-    elseif command == "ui" then
-        makeUI(item)
-    elseif command == "d" then
+    elseif string.match(command, "ui") then -- render the UI
+        makeUIargs(item, command)
+    elseif command == "d" then              -- delete the cheapest item
         deleteItem(item)
-    else
+    else                                    -- SAY unknown command
         SendChatMessage("unknown command " .. command, "SAY", nil, nil)
     end
 end
 
-SlashCmdList["MADS"] = startCommand
+-- slash command aliases
+SLASH_CQOL1 = "/classicqol"
+SLASH_CQOL2 = "/cqol"
+-- register the slash command
+SlashCmdList["CQOL"] = startCommand
+--[[ When a player types /classicqol or /cqol in the chat, 
+WoW looks up the CQOL entry in SlashCmdList 
+and calls the associated function (startCommand) 
+with any additional arguments passed as a string ]]--
+
+--[[ NOTES
+wiki: https://wowpedia.fandom.com/wiki
+enable lua errors:
+  /console scriptErrors 1
+disable:
+  /console scriptErrors 0
+UnitName("player")
+message("face")
+itype == "Miscellaneous" or itype == "Junk"
+layers:
+background, border, artwork, overlay, hightlight ]] --

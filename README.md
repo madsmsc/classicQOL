@@ -1,2 +1,6 @@
-# MyAddon
-Wow Lua addon to delete cheapest items
+# classicQOL
+Wow Lua addon for classic/era.
+
+Introduces quality-of-life features:
+- delete cheapest items
+- ...?

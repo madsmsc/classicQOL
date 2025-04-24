@@ -1,7 +1,7 @@
 ## Interface: 11403
-## Title: MyAddon
+## Title: classicQOL
 ## Notes: Delete cheapest item
 ## Author: Mads
-## Version: 0.1.0
+## Version: 0.2.0
 
-MyAddon.lua
+classicQOL.lua

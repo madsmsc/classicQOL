@@ -3,8 +3,8 @@ local GameTooltip, CreateFrame, UIParent, SlashCmdList, SendChatMessage =
     GameTooltip, CreateFrame, UIParent, SlashCmdList, SendChatMessage
 local C_Container, GetItemInfo, ClearCursor, DeleteCursorItem =
     C_Container, GetItemInfo, ClearCursor, DeleteCursorItem
-local UnitName, UnitLevel, GetTime, UnitIsDead, UnitIsGhost =
-    UnitName, UnitLevel, GetTime, UnitIsDead, UnitIsGhost
+local UnitName, UnitLevel, UnitIsDead, UnitIsGhost =
+    UnitName, UnitLevel, UnitIsDead, UnitIsGhost
 
 -- SAY contents of table - used for debugging
 local function sayTable(table)
@@ -152,10 +152,13 @@ local function makeButton(uiConfig, item, column, yoff)
     end)
 end
 
--- return array of elements separated by spaces
--- maybe try with " " instead of regexp
+-- return table
 local function strSplit(str)
-    return string.gmatch(str, "[^%s]+")
+    local result = {}
+    for word in string.gmatch(str, "[^%s]+") do
+        table.insert(result, word)
+    end
+    return result
 end
 
 -- return number of occurances
@@ -186,23 +189,26 @@ local function makeUIargs(item, command)
     local cols = 4
     if spaces == 2 then
         local args = strSplit(command)
-        cols = args[1]
-        rows = args[2]
+        cols = tonumber(args[1]) or cols -- Ensure numeric conversion
+        rows = tonumber(args[2]) or rows -- Ensure numeric conversion
     end
-    makeUI(item, rows, cols)
+    makeUI(item, cols, rows)
 end
 
 -- report the state of the characters
 local function hcReport()
-    local state = ClassicQolState or {}
+    if ClassicQolState == nil or ClassicQolState.chars == nil then
+        print("did not update state yet...")
+        return
+    end
+    local chars = ClassicQolState.chars
     local aliveLevels = 0
     local aliveHours = 0
     local deadLevels = 0
     local deadHours = 0
     local alive = 0
     local dead = 0
-    for i=1, #state.chars do
-        local c = state.chars[i]
+    for _, c in pairs(chars) do
         if c.isAlive then
             aliveLevels = aliveLevels + c.levels
             aliveHours = aliveHours + c.hours
@@ -213,40 +219,55 @@ local function hcReport()
             dead = dead + 1
         end
     end
+    -- TODO: rewrite to two lines, more essay-like?
+    -- TODO: add gold summary on alive/dead chars?
     print("alive levels: " .. aliveLevels)
     print("alive hours: " .. aliveHours)
     print("dead levels: " .. deadLevels)
     print("dead hours: " .. deadHours)
-    print("alive: " .. alive)
-    print("dead: " .. dead)
+    print("alive chars: " .. alive)
+    print("dead chars: " .. dead)
 end
 
 -- save the current character state
-local function updateState()
+local function updateStateOther()
     ClassicQolState = ClassicQolState or {}
+    ClassicQolState.chars = ClassicQolState.chars or {} -- init chars table
+    local chars = ClassicQolState.chars
     local playerName = UnitName("player")
-    if ClassicQolState.chars[playerName] == nil then
-        ClassicQolState.chars[playerName] = {}
+    if chars[playerName] == nil then
+        chars[playerName] = {}
     end
-    ClassicQolState.chars[playerName].levels = UnitLevel("player")
-    ClassicQolState.chars[playerName].hours = GetTime() / 3600
+    RequestTimePlayed()
+    chars[playerName].levels = UnitLevel("player")
     local isDead = UnitIsDead("player")
     local isGhost = UnitIsGhost("player")
-    ClassicQolState.chars[playerName].isAlive = not isDead and not isGhost
-    print("updated state... " .. playerName .. ": "
-        .. ClassicQolState.chars[playerName].levels .. " levels, "
-        .. ClassicQolState.chars[playerName].hours .. " hours, isAlive? "
-        .. tostring(ClassicQolState.chars[playerName].isAlive))
+    chars[playerName].isAlive = not isDead and not isGhost
+    print("updated " .. playerName .. ": level="
+        .. chars[playerName].levels .. " isAlive="
+        .. tostring(chars[playerName].isAlive))
+end
+
+local function updateStateHours(event, totalTime, levelTime)
+    local playerName = UnitName("player")
+    local chars = ClassicQolState.chars
+    ClassicQolState.chars[playerName].hours = tonumber(string.format("%.2f", totalTime / 3600)) -- Convert seconds to hours
+    print("updated " .. playerName .. ": hours="
+        .. chars[playerName].hours)
 end
 
 -- Create a frame to listen for events
 local eventFrame = CreateFrame("Frame")
--- Register for the PLAYER_LOGIN event
-eventFrame:RegisterEvent("PLAYER_LOGIN")
+local loadEvent = "PLAYER_ENTERING_WORLD"
+local timeEvent = "TIME_PLAYED_MSG"
+eventFrame:RegisterEvent(timeEvent)
+eventFrame:RegisterEvent(loadEvent)
 -- Set a script to handle the event
 eventFrame:SetScript("OnEvent", function(self, event, ...)
-    if event == "PLAYER_LOGIN" then
-        updateState()
+    if event == timeEvent then
+        updateStateHours(event, ...)
+    elseif event == loadEvent then
+        updateStateOther()
     end
 end)
 
@@ -269,10 +290,10 @@ local function startCommand(command)
 end
 
 -- slash command aliases
-SLASH_CQOL1 = "/classicqol"
-SLASH_CQOL2 = "/cqol"
+SLASH_CQ1 = "/classicqol"
+SLASH_CQ2 = "/cq"
 -- register the slash command
-SlashCmdList["CQOL"] = startCommand
+SlashCmdList["CQ"] = startCommand
 --[[ When a player types /classicqol or /cqol in the chat,
 WoW looks up the CQOL entry in SlashCmdList
 and calls the associated function (startCommand)

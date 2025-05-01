@@ -1,7 +1,8 @@
 ## Interface: 11403
 ## Title: classicQOL
-## Notes: Delete cheapest item
+## Notes: Quality of life addon for classic (and HC)
 ## Author: Mads
 ## Version: 0.2.0
+## SavedVariables: ClassicQolState
 
 classicQOL.lua

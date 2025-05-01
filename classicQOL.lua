@@ -3,6 +3,8 @@ local GameTooltip, CreateFrame, UIParent, SlashCmdList, SendChatMessage =
     GameTooltip, CreateFrame, UIParent, SlashCmdList, SendChatMessage
 local C_Container, GetItemInfo, ClearCursor, DeleteCursorItem =
     C_Container, GetItemInfo, ClearCursor, DeleteCursorItem
+local UnitName, UnitLevel, GetTime, UnitIsDead, UnitIsGhost =
+    UnitName, UnitLevel, GetTime, UnitIsDead, UnitIsGhost
 
 -- SAY contents of table - used for debugging
 local function sayTable(table)
@@ -28,7 +30,7 @@ local function contains(table, element)
     return false
 end
 
-local function updateItem(item, bag, slot, names)
+local function findCheaperItem(item, bag, slot, names)
     -- sayTable(names)
     local containerInfo = C_Container.GetContainerItemInfo(bag, slot)
     if containerInfo == nil or containerInfo.hyperlink == nil then
@@ -75,7 +77,7 @@ local function cheapest(names)
         local maxSlots = C_Container.GetContainerNumSlots(bag)
         -- SendChatMessage("checking bag " .. bag .. " slots " .. maxSlots, "SAY", nil, nil)
         for slot = 1, maxSlots do
-            updateItem(item, bag, slot, names)
+            findCheaperItem(item, bag, slot, names)
         end
     end
     return item
@@ -127,9 +129,18 @@ local function makeButton(uiConfig, item, column, yoff)
     uiConfig.button:SetHighlightFontObject("GameFontHighlightLarge")
     uiConfig.button:SetNormalTexture(item.tex)
 
+    -- set outline for quest items (classID 12)
+    if item.itype == "Quest" then
+        uiConfig.button:SetBackdrop({
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", -- default border texture
+            edgeSize = 12
+        })
+        uiConfig.button:SetBackdropBorderColor(1, 1, 0, 1) -- yellow (RGBA)
+    end
+
     -- set scripts
     uiConfig.button:SetScript("OnClick", function(self, button, down) -- maybe button/down can be omitted
-            deleteItem(item)
+        deleteItem(item)
     end)
     uiConfig.button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -181,6 +192,64 @@ local function makeUIargs(item, command)
     makeUI(item, rows, cols)
 end
 
+-- report the state of the characters
+local function hcReport()
+    local state = ClassicQolState or {}
+    local aliveLevels = 0
+    local aliveHours = 0
+    local deadLevels = 0
+    local deadHours = 0
+    local alive = 0
+    local dead = 0
+    for i=1, #state.chars do
+        local c = state.chars[i]
+        if c.isAlive then
+            aliveLevels = aliveLevels + c.levels
+            aliveHours = aliveHours + c.hours
+            alive = alive + 1
+        else
+            deadLevels = deadLevels + c.levels
+            deadHours = deadHours + c.hours
+            dead = dead + 1
+        end
+    end
+    print("alive levels: " .. aliveLevels)
+    print("alive hours: " .. aliveHours)
+    print("dead levels: " .. deadLevels)
+    print("dead hours: " .. deadHours)
+    print("alive: " .. alive)
+    print("dead: " .. dead)
+end
+
+-- save the current character state
+local function updateState()
+    ClassicQolState = ClassicQolState or {}
+    local playerName = UnitName("player")
+    if ClassicQolState.chars[playerName] == nil then
+        ClassicQolState.chars[playerName] = {}
+    end
+    ClassicQolState.chars[playerName].levels = UnitLevel("player")
+    ClassicQolState.chars[playerName].hours = GetTime() / 3600
+    local isDead = UnitIsDead("player")
+    local isGhost = UnitIsGhost("player")
+    ClassicQolState.chars[playerName].isAlive = not isDead and not isGhost
+    print("updated state... " .. playerName .. ": "
+        .. ClassicQolState.chars[playerName].levels .. " levels, "
+        .. ClassicQolState.chars[playerName].hours .. " hours, isAlive? "
+        .. tostring(ClassicQolState.chars[playerName].isAlive))
+end
+
+-- Create a frame to listen for events
+local eventFrame = CreateFrame("Frame")
+-- Register for the PLAYER_LOGIN event
+eventFrame:RegisterEvent("PLAYER_LOGIN")
+-- Set a script to handle the event
+eventFrame:SetScript("OnEvent", function(self, event, ...)
+    if event == "PLAYER_LOGIN" then
+        updateState()
+    end
+end)
+
 -- parse the slash command and args
 local function startCommand(command)
     local item = cheapest()
@@ -192,6 +261,8 @@ local function startCommand(command)
         makeUIargs(item, command)
     elseif command == "d" then              -- delete the cheapest item
         deleteItem(item)
+    elseif command == "r" then              -- report the state of the characters
+        hcReport()
     else                                    -- SAY unknown command
         SendChatMessage("unknown command " .. command, "SAY", nil, nil)
     end
@@ -202,10 +273,10 @@ SLASH_CQOL1 = "/classicqol"
 SLASH_CQOL2 = "/cqol"
 -- register the slash command
 SlashCmdList["CQOL"] = startCommand
---[[ When a player types /classicqol or /cqol in the chat, 
-WoW looks up the CQOL entry in SlashCmdList 
-and calls the associated function (startCommand) 
-with any additional arguments passed as a string ]]--
+--[[ When a player types /classicqol or /cqol in the chat,
+WoW looks up the CQOL entry in SlashCmdList
+and calls the associated function (startCommand)
+with any additional arguments passed as a string ]] --
 
 --[[ NOTES
 wiki: https://wowpedia.fandom.com/wiki

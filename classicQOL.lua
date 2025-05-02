@@ -3,8 +3,8 @@ local GameTooltip, CreateFrame, UIParent, SlashCmdList, SendChatMessage =
     GameTooltip, CreateFrame, UIParent, SlashCmdList, SendChatMessage
 local C_Container, GetItemInfo, ClearCursor, DeleteCursorItem =
     C_Container, GetItemInfo, ClearCursor, DeleteCursorItem
-local UnitName, UnitLevel, UnitIsDead, UnitIsGhost =
-    UnitName, UnitLevel, UnitIsDead, UnitIsGhost
+local UnitName, UnitLevel, UnitIsDead, UnitIsGhost, RequestTimePlayed =
+    UnitName, UnitLevel, UnitIsDead, UnitIsGhost, RequestTimePlayed
 
 -- SAY contents of table - used for debugging
 local function sayTable(table)
@@ -101,18 +101,19 @@ local function sayCheapest(item)
 end
 
 local function makeFrame()
-    local POSITION = "CENTER" -- "BOTTOMRIGHT"
+    local pos = "CENTER" -- "BOTTOMRIGHT"
     local template = "BasicFrameTemplateWithInset"
     local uiConfig = CreateFrame("Frame", "MyAddon", UIParent, template)
     uiConfig:SetSize(150, 105)
-    uiConfig:SetPoint(POSITION, UIParent, POSITION)
+    uiConfig:SetPoint(pos, UIParent, pos)
     return uiConfig
 end
 
 local function makeTitle(uiConfig)
+    local pos = "CENTER" -- "BOTTOM"
     uiConfig.title = uiConfig:CreateFontString(nil, "OVERLAY")
     uiConfig.title:SetFontObject("GameFontHighlight")
-    uiConfig.title:SetPoint("CENTER", uiConfig.TitleBg, "CENTER", 0, 0)
+    uiConfig.title:SetPoint(pos, uiConfig.TitleBg, pos, 0, 0)
     uiConfig.title:SetText("Cheapest items:")
 end
 
@@ -185,8 +186,8 @@ end
 -- call makeUI based on the arguments
 local function makeUIargs(item, command)
     local spaces = strCount(command, " ")
-    local rows = 2
     local cols = 4
+    local rows = 2
     if spaces == 2 then
         local args = strSplit(command)
         cols = tonumber(args[1]) or cols -- Ensure numeric conversion
@@ -219,14 +220,10 @@ local function hcReport()
             dead = dead + 1
         end
     end
-    -- TODO: rewrite to two lines, more essay-like?
-    -- TODO: add gold summary on alive/dead chars?
-    print("alive levels: " .. aliveLevels)
-    print("alive hours: " .. aliveHours)
-    print("dead levels: " .. deadLevels)
-    print("dead hours: " .. deadHours)
-    print("alive chars: " .. alive)
-    print("dead chars: " .. dead)
+    print(alive .. " chars alive with " .. aliveLevels
+        .. " levels and " .. aliveHours .. " hours")
+    print(dead .. " chars dead with " .. deadLevels
+        .. " levels and " .. deadHours .. " hours")
 end
 
 -- save the current character state
